@@ -28,115 +28,85 @@ scene.add(dirLight);
 const ambLight = new THREE.AmbientLight(0xffffff, 0.3);
 scene.add(ambLight);
 
-// --- Earth Texture Generation ---
-function createFaceTexture(drawContinents) {
-  const size = 512;
+// --- Equirectangular to Cube Face Projection ---
+function projectToCubeFace(image, face, size) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
 
-  // Ocean gradient
-  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size * 0.7);
-  grad.addColorStop(0, '#1a6e9e');
-  grad.addColorStop(1, '#0d3b66');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
+  // Draw source image to a temp canvas for pixel access
+  const srcCanvas = document.createElement('canvas');
+  srcCanvas.width = image.width;
+  srcCanvas.height = image.height;
+  const srcCtx = srcCanvas.getContext('2d');
+  srcCtx.drawImage(image, 0, 0);
+  const srcData = srcCtx.getImageData(0, 0, image.width, image.height);
 
-  // Draw continents
-  drawContinents(ctx, size);
+  const outData = ctx.createImageData(size, size);
+  const iw = image.width;
+  const ih = image.height;
 
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      // Normalize to -1..1
+      const u = (x / size) * 2 - 1;
+      const v = (y / size) * 2 - 1;
+
+      // 3D direction based on cube face
+      let dx, dy, dz;
+      switch (face) {
+        case 0: dx =  1; dy = -v; dz = -u; break; // +X
+        case 1: dx = -1; dy = -v; dz =  u; break; // -X
+        case 2: dx =  u; dy =  1; dz =  v; break; // +Y
+        case 3: dx =  u; dy = -1; dz = -v; break; // -Y
+        case 4: dx =  u; dy = -v; dz =  1; break; // +Z
+        case 5: dx = -u; dy = -v; dz = -1; break; // -Z
+      }
+
+      // Convert to spherical (lat/lon)
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      dx /= len; dy /= len; dz /= len;
+      const lat = Math.asin(dy);
+      const lon = Math.atan2(dz, dx);
+
+      // Map to equirectangular image coordinates
+      const sx = ((lon / Math.PI + 1) / 2) * iw;
+      const sy = (0.5 - lat / Math.PI) * ih;
+      const si = (Math.floor(sy) * iw + Math.floor(sx)) * 4;
+      const di = (y * size + x) * 4;
+
+      outData.data[di] = srcData.data[si];
+      outData.data[di + 1] = srcData.data[si + 1];
+      outData.data[di + 2] = srcData.data[si + 2];
+      outData.data[di + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(outData, 0, 0);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 
-function drawPoly(ctx, size, points, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(points[0][0] * size, points[0][1] * size);
-  for (let i = 1; i < points.length; i++) {
-    ctx.lineTo(points[i][0] * size, points[i][1] * size);
-  }
-  ctx.closePath();
-  ctx.fill();
-}
-
-const land = '#2d6a4f';
-const landLight = '#40916c';
-const ice = '#b8d4e3';
-
-const earthTextures = [
-  // +X face (right): East Asia, Australia
-  createFaceTexture((ctx, s) => {
-    drawPoly(ctx, s, [[0,0],[0.8,0],[0.9,0.15],[0.7,0.3],[0.85,0.45],[0.6,0.5],[0.3,0.45],[0.15,0.3],[0,0.2]], land);
-    drawPoly(ctx, s, [[0.1,0.12],[0.4,0.08],[0.5,0.2],[0.3,0.25]], landLight);
-    // Australia
-    drawPoly(ctx, s, [[0.45,0.65],[0.85,0.6],[0.9,0.75],[0.8,0.9],[0.55,0.92],[0.4,0.8]], land);
-    drawPoly(ctx, s, [[0.5,0.68],[0.7,0.65],[0.75,0.75],[0.6,0.8]], landLight);
-    // Japan
-    drawPoly(ctx, s, [[0.85,0.2],[0.9,0.18],[0.92,0.35],[0.87,0.38]], land);
-  }),
-  // -X face (left): Americas
-  createFaceTexture((ctx, s) => {
-    // North America
-    drawPoly(ctx, s, [[0.1,0.02],[0.7,0],[0.85,0.1],[0.9,0.25],[0.75,0.35],[0.6,0.42],[0.45,0.45],[0.35,0.42],[0.2,0.3],[0.05,0.15]], land);
-    drawPoly(ctx, s, [[0.3,0.1],[0.6,0.08],[0.65,0.2],[0.4,0.25]], landLight);
-    // Central America
-    drawPoly(ctx, s, [[0.4,0.45],[0.5,0.44],[0.55,0.55],[0.45,0.55]], land);
-    // South America
-    drawPoly(ctx, s, [[0.35,0.55],[0.65,0.53],[0.7,0.65],[0.65,0.8],[0.55,0.92],[0.4,0.95],[0.3,0.85],[0.25,0.7]], land);
-    drawPoly(ctx, s, [[0.4,0.6],[0.55,0.58],[0.58,0.7],[0.45,0.75]], landLight);
-  }),
-  // +Y face (top): Arctic / North Pole
-  createFaceTexture((ctx, s) => {
-    ctx.fillStyle = ice;
-    ctx.beginPath();
-    ctx.arc(s * 0.5, s * 0.5, s * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-    // Surrounding land hints
-    drawPoly(ctx, s, [[0,0.7],[0.3,0.6],[0.35,0.8],[0.1,0.9],[0,0.85]], land);
-    drawPoly(ctx, s, [[0.65,0.6],[1,0.7],[1,0.9],[0.7,0.85]], land);
-    drawPoly(ctx, s, [[0.2,0],[0.5,0.05],[0.45,0.2],[0.15,0.15]], land);
-  }),
-  // -Y face (bottom): Antarctic / South Pole
-  createFaceTexture((ctx, s) => {
-    ctx.fillStyle = ice;
-    ctx.beginPath();
-    ctx.arc(s * 0.5, s * 0.5, s * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-    drawPoly(ctx, s, [[0.2,0.3],[0.8,0.25],[0.85,0.5],[0.7,0.7],[0.3,0.72],[0.15,0.55]], '#a0c4d8');
-  }),
-  // +Z face (front): Europe, Africa
-  createFaceTexture((ctx, s) => {
-    // Europe
-    drawPoly(ctx, s, [[0.25,0.02],[0.7,0],[0.75,0.1],[0.65,0.2],[0.8,0.25],[0.55,0.3],[0.3,0.28],[0.15,0.15]], land);
-    drawPoly(ctx, s, [[0.35,0.08],[0.55,0.06],[0.5,0.18],[0.35,0.2]], landLight);
-    // Africa
-    drawPoly(ctx, s, [[0.35,0.32],[0.65,0.3],[0.75,0.45],[0.72,0.65],[0.6,0.85],[0.45,0.9],[0.3,0.78],[0.28,0.55],[0.32,0.4]], land);
-    drawPoly(ctx, s, [[0.4,0.4],[0.58,0.38],[0.6,0.55],[0.45,0.6]], landLight);
-    // Madagascar
-    drawPoly(ctx, s, [[0.78,0.6],[0.83,0.58],[0.85,0.72],[0.8,0.75]], land);
-  }),
-  // -Z face (back): Pacific Ocean
-  createFaceTexture((ctx, s) => {
-    // Mostly ocean with small islands
-    drawPoly(ctx, s, [[0.15,0.35],[0.2,0.33],[0.22,0.38],[0.17,0.4]], land);
-    drawPoly(ctx, s, [[0.6,0.5],[0.65,0.48],[0.67,0.53],[0.62,0.55]], land);
-    drawPoly(ctx, s, [[0.4,0.7],[0.45,0.68],[0.47,0.73],[0.42,0.75]], land);
-    drawPoly(ctx, s, [[0.8,0.25],[0.85,0.22],[0.88,0.28],[0.83,0.3]], land);
-    // New Zealand hint
-    drawPoly(ctx, s, [[0.1,0.7],[0.15,0.68],[0.17,0.78],[0.12,0.82]], land);
-    drawPoly(ctx, s, [[0.13,0.82],[0.16,0.8],[0.18,0.88],[0.14,0.9]], land);
-  }),
-];
-
 // --- Earth Cube ---
-const materials = earthTextures.map(tex => new THREE.MeshStandardMaterial({ map: tex }));
 const geometry = new THREE.BoxGeometry(1, 1, 1);
-const cube = new THREE.Mesh(geometry, materials);
+const cube = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x0d3b66 }));
 cube.rotation.z = 23.5 * Math.PI / 180;
 scene.add(cube);
+
+// Load earth texture and project onto cube faces
+const earthImage = new Image();
+earthImage.crossOrigin = 'anonymous';
+earthImage.onload = () => {
+  const faceSize = 512;
+  const textures = [];
+  for (let i = 0; i < 6; i++) {
+    textures.push(projectToCubeFace(earthImage, i, faceSize));
+  }
+  cube.material = textures.map(tex => new THREE.MeshStandardMaterial({ map: tex }));
+};
+earthImage.src = 'textures/earth.jpg';
 
 // --- Star Field ---
 const starCount = 2000;
