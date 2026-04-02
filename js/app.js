@@ -168,7 +168,9 @@ scene.add(stars);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.enableZoom = false;
+controls.enableZoom = true;
+controls.minDistance = 1.5;
+controls.maxDistance = 8;
 controls.enablePan = false;
 controls.autoRotate = false;
 
