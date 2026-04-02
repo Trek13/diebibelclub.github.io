@@ -11,6 +11,14 @@ document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
+// Milky way background
+const bgLoader = new THREE.TextureLoader();
+bgLoader.load('textures/milkyway.png', (texture) => {
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  scene.background = texture;
+});
+
 // --- Camera ---
 const camera = new THREE.PerspectiveCamera(
   45,
