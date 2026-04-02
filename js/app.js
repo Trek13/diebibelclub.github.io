@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // --- Renderer ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -193,6 +194,14 @@ const starMaterial = new THREE.ShaderMaterial({
 const stars = new THREE.Points(starGeometry, starMaterial);
 scene.add(stars);
 
+// --- Controls ---
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.enableZoom = false;
+controls.enablePan = false;
+controls.autoRotate = false;
+
 // --- Animation Loop ---
 const clock = new THREE.Clock();
 
@@ -201,6 +210,7 @@ function animate() {
   const elapsed = clock.getElapsedTime();
   cube.rotation.y += 0.005;
   starMaterial.uniforms.uTime.value = elapsed;
+  controls.update();
   renderer.render(scene, camera);
 }
 animate();
