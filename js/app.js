@@ -221,4 +221,5 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   camera.position.z = window.innerWidth < 768 ? 4.0 : 3.5;
   renderer.setSize(window.innerWidth, window.innerHeight);
+  starMaterial.uniforms.uPixelRatio.value = Math.min(window.devicePixelRatio, 2);
 });
