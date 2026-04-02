@@ -21,11 +21,11 @@ const camera = new THREE.PerspectiveCamera(
 camera.position.z = window.innerWidth < 768 ? 4.0 : 3.5;
 
 // --- Lights ---
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
 dirLight.position.set(5, 3, 5);
 scene.add(dirLight);
 
-const ambLight = new THREE.AmbientLight(0xffffff, 0.3);
+const ambLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambLight);
 
 // --- Equirectangular to Cube Face Projection ---
