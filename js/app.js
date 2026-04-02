@@ -137,10 +137,70 @@ const cube = new THREE.Mesh(geometry, materials);
 cube.rotation.z = 23.5 * Math.PI / 180;
 scene.add(cube);
 
+// --- Star Field ---
+const starCount = 2000;
+const starPositions = new Float32Array(starCount * 3);
+const starSizes = new Float32Array(starCount);
+const starPhases = new Float32Array(starCount);
+
+for (let i = 0; i < starCount; i++) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  const r = 40 + Math.random() * 20;
+  starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+  starPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+  starPositions[i * 3 + 2] = r * Math.cos(phi);
+  starSizes[i] = 1.0 + Math.random() * 2.0;
+  starPhases[i] = Math.random() * Math.PI * 2;
+}
+
+const starGeometry = new THREE.BufferGeometry();
+starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+starGeometry.setAttribute('aSize', new THREE.BufferAttribute(starSizes, 1));
+starGeometry.setAttribute('aPhase', new THREE.BufferAttribute(starPhases, 1));
+
+const starMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    uTime: { value: 0 },
+    uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
+  },
+  vertexShader: `
+    attribute float aSize;
+    attribute float aPhase;
+    uniform float uTime;
+    uniform float uPixelRatio;
+    varying float vOpacity;
+    void main() {
+      vOpacity = 0.5 + 0.5 * sin(uTime * 1.5 + aPhase);
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = aSize * uPixelRatio * (100.0 / -mvPosition.z);
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  `,
+  fragmentShader: `
+    varying float vOpacity;
+    void main() {
+      float d = length(gl_PointCoord - vec2(0.5));
+      if (d > 0.5) discard;
+      float alpha = smoothstep(0.5, 0.1, d) * vOpacity;
+      gl_FragColor = vec4(1.0, 1.0, 1.0, alpha);
+    }
+  `,
+  transparent: true,
+  depthWrite: false,
+});
+
+const stars = new THREE.Points(starGeometry, starMaterial);
+scene.add(stars);
+
 // --- Animation Loop ---
+const clock = new THREE.Clock();
+
 function animate() {
   requestAnimationFrame(animate);
+  const elapsed = clock.getElapsedTime();
   cube.rotation.y += 0.005;
+  starMaterial.uniforms.uTime.value = elapsed;
   renderer.render(scene, camera);
 }
 animate();
